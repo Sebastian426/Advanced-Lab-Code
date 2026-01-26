@@ -108,6 +108,7 @@ def Calibration_Fitter(model, p0_model, start_index,
                  fmt='o', ms=3)
     plt.xlabel('monochromator value')
     plt.ylabel('wavelength (nm)')
+    plt.title("Fitted model for monochromator")
     plt.show()
 
     print('----- Results -----')
