@@ -21,7 +21,7 @@ def Lorentzian_Function(x, A, x0, B, C):
 
 #Lorentzian fitter and peak index extractor
 
-def peak_extractor(file, sheets, cols):
+def peak_extractor(file, sheets, cols, uncertainty_frac=1e-3):
     peak_indexes = []
 
     for sheet, sheet_cols in zip(sheets, cols):
@@ -36,14 +36,22 @@ def peak_extractor(file, sheets, cols):
         mean_amp = amplitudes.mean(axis=0)
         std_amp  = amplitudes.std(axis=0, ddof=1)
 
+        # ---- Enforce uncertainty floor ----
+        nonzero_std = std_amp[std_amp > 0]
+        if len(nonzero_std) == 0:
+            raise RuntimeError(f"All uncertainties are zero in sheet '{sheet}'")
+
+        uncertainty_floor = uncertainty_frac * np.max(nonzero_std)
+        std_amp = np.maximum(std_amp, uncertainty_floor)
+
         index_list = np.arange(len(mean_amp))
 
         # ---- Initial guess ----
         p0 = [
-            mean_amp.max(),                 # A
-            np.argmax(mean_amp),            # x0
-            10,                              # B (width)
-            mean_amp.min()                  # C
+            mean_amp.max(),               # A
+            np.argmax(mean_amp),          # x0
+            10,                            # B (width guess)
+            mean_amp.min()                # C
         ]
 
         # ---- Fit ----
@@ -76,9 +84,13 @@ def peak_extractor(file, sheets, cols):
 
         plt.figure()
         plt.scatter(index_list, mean_amp, color='black', s=8, label='Binned data')
-        plt.plot(x_fit,
-                 Lorentzian_Function(x_fit, *popt),
-                 color='red', linestyle='--', label='Lorentzian fit')
+        plt.plot(
+            x_fit,
+            Lorentzian_Function(x_fit, *popt),
+            color='red',
+            linestyle='--',
+            label='Lorentzian fit'
+        )
         plt.axvline(peak, color='blue', linestyle=':', label='Peak')
 
         plt.title(f'{sheet} Lorentzian Fit')
@@ -93,6 +105,7 @@ def peak_extractor(file, sheets, cols):
         print(f"Sheet: {sheet}")
         print(f"Peak index = {peak:.3f} ± {peak_err:.3f}")
         print(f"Reduced χ² = {rchi2:.3f}")
+        print(f"Uncertainty floor applied: {uncertainty_floor:.3e}")
         print("----- ----- -----\n")
 
     return np.array(peak_indexes)
