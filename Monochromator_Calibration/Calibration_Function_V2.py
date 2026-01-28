@@ -9,8 +9,8 @@ from scipy.optimize import curve_fit
 
 #functions we need to call inside the big functions
 
-def chi_squared(model_params, model, x_data, y_data, y_error):
-    return(np.sum(((y_data - model(x_data, *model_params))/y_error)**2))
+def chi_squared(model, model_params, x_data, y_data, y_error):
+    return np.sum(((y_data - model(x_data, *model_params)) / y_error)**2)
 
 def reduced_chi_squared(Chi_squared, DoF):
     return Chi_squared / (DoF)
@@ -32,6 +32,13 @@ def peak_extractor(
     max_width=300
 ):
     peak_indexes = []
+
+    # ---- Normalise inputs to lists ----
+    if isinstance(sheets, str):
+        sheets = [sheets]
+
+    if isinstance(cols[0], str):
+        cols = [cols]
 
     for sheet, sheet_cols in zip(sheets, cols):
 
@@ -157,5 +164,5 @@ def peak_extractor(
         print(f"Amplitude cutoff = {amplitude_frac:.1%} of A_max")
         print("----- ----- -----\n")
 
-    return np.array(peak_indexes)
+    return np.atleast_1d(peak_indexes), np.atleast_1d(peak_err)
 
