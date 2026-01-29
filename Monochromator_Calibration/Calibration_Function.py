@@ -54,7 +54,8 @@ def Calibration_Index(file_name, sheet_names, column_names):
         mean_peak_uncertainties.append(np.std(max_intensity)/np.sqrt(len(max_intensity)))
 
         print("----- Results -----")
-        print(f"Sheet '{sheet_name}': mean peak index = {np.mean(max_intensity)}")
+        print(f"Sheet '{sheet_name}': mean peak index = {np.mean(max_intensity)} ± {np.std(max_intensity)/np.sqrt(len(max_intensity))}")
+        print(f"Standard deviation of the mean is {np.std(max_intensity)}")
         print("----- ----- -----")
 
     return mean_peak_indices, mean_peak_uncertainties
