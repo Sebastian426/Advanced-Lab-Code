@@ -43,6 +43,7 @@ def Calibration_Index(file_name, sheet_names, column_names):
         for i in range(len(amplitudes)):
             plt.scatter(index_list, amplitudes[i],
                         label=cols[i], marker='o', s=3)
+            plt.axvline(max_intensity[i], linestyle='dashed')
 
         plt.xlabel('Index')
         plt.ylabel('Intensity')
