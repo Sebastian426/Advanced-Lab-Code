@@ -184,6 +184,7 @@ def Peak_Wavelength(
     sheets,
     cols,
     start_index,
+    *,
     amplitude_frac=0.01,
     uncertainty_frac=1e-3,
     min_points=15,
@@ -225,6 +226,8 @@ def Peak_Wavelength(
         )
         wavelengths.append(wl)
         wavelength_errors.append(wl_err)
+
+    print(f"The Peak wavelengths are: {wavelengths}")
 
     return (
         np.atleast_1d(wavelengths),
