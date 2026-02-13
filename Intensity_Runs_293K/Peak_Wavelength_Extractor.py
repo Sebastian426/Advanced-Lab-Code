@@ -227,7 +227,7 @@ def Peak_Wavelength(
         wavelengths.append(wl)
         wavelength_errors.append(wl_err)
 
-    print(f"The Peak wavelengths are: {wavelengths}")
+    print(f"The Peak wavelengths are: {wavelengths} ± {wavelength_errors}")
 
     return (
         np.atleast_1d(wavelengths),
