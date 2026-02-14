@@ -49,7 +49,7 @@ def rchi2_function(model, model_params, x_data, y_data, y_error, DoF):
 
 ###########################
 
-def intensity_examiner(filename, sheet_name, column_name, start_index):
+def intensity_examiner(filename, sheet_name, column_name, start_index, cutoff = 0.1):
 
     results = {}
 
@@ -91,8 +91,6 @@ def intensity_examiner(filename, sheet_name, column_name, start_index):
 
             y_fitdata = []
             wavelengths_chosen = []
-
-            cutoff = 0.1
 
             for i in range(len(ydata)):
                 if ydata[i] > cutoff * ydata.max():
@@ -198,9 +196,22 @@ def double_lorentzian(x, A1, x01, B1, A2, x02, B2, C):
     )
 
 
-def double_lorentzian_intensity_extractor(filename, sheet_name, column_name, start_index):
+def double_lorentzian_intensity_extractor(
+    filename,
+    sheet_name,
+    column_name,
+    start_index,
+    amplitude_frac=0.01,
+    min_points=25,
+    min_width=0.1,
+    max_width=10
+):
 
     results = {}
+
+    # ---- Normalise sheet input ----
+    if isinstance(sheet_name, str):
+        sheet_name = [sheet_name]
 
     for s in range(len(sheet_name)):
 
@@ -210,25 +221,12 @@ def double_lorentzian_intensity_extractor(filename, sheet_name, column_name, sta
 
         print(f"\nProcessing sheet: {sheet}")
 
-        df = pd.read_excel(filename, sheet_name=sheet)
+        df = pd.read_excel(filename, sheet_name=sheet).dropna()
 
         # ---------- WAVELENGTH EXTRACTION ----------
         indexes = np.arange(0, len(df[cols[0]]), 1)
         wavelengths = wavelength_extraction(indexes, start)
         wavelengths = np.array(wavelengths, dtype=float)
-
-        # ---------- PLOT ALL SPECTRA ----------
-        plt.figure(1)
-        for col in cols:
-            plt.plot(wavelengths, df[col], label=col)
-
-        plt.xlabel("Wavelength (nm)")
-        plt.ylabel("Intensity")
-        plt.minorticks_on()
-        plt.tick_params(axis='both', which='major', size=6, direction='in')
-        plt.tick_params(axis='both', which='minor', size=3, direction='in')
-        plt.legend()
-        plt.show()
 
         x01_list = []
         x02_list = []
@@ -238,33 +236,79 @@ def double_lorentzian_intensity_extractor(filename, sheet_name, column_name, sta
 
             ydata = df[col].values.astype(float)
 
-            # No aggressive cutoff for double peak
-            y_fitdata = ydata
-            wavelengths_fit = wavelengths
+            # ---- Peak estimate ----
+            peak_guess = np.argmax(ydata)
+            Amax = ydata[peak_guess]
 
-            # Initial guesses
-            peak_index = np.argmax(ydata)
-            peak_wavelength = wavelengths[peak_index]
+            # ---- Amplitude-based mask ----
+            raw_mask = ydata > amplitude_frac * Amax
+            valid_indices = np.where(raw_mask)[0]
 
-            separation_guess = 1.0  # Ruby R-line separation ≈ 1 nm
+            # ---- Keep contiguous region around peak ----
+            splits = np.where(np.diff(valid_indices) > 1)[0]
+            blocks = np.split(valid_indices, splits + 1)
 
-            B_guess = (wavelengths.max() - wavelengths.min()) / 20
+            for block in blocks:
+                if peak_guess in block:
+                    fit_indices = block
+                    break
+            else:
+                raise RuntimeError(f"No valid fit region found in sheet '{sheet}'")
+
+            # ---- Minimum points check ----
+            if len(fit_indices) < min_points:
+                raise RuntimeError(
+                    f"Too few points in fit region ({len(fit_indices)} < {min_points})"
+                )
+
+            wavelengths_fit = wavelengths[fit_indices]
+            y_fitdata = ydata[fit_indices]
+
+            # ---- Initial guesses ----
+            peak_wavelength = wavelengths[peak_guess]
+            separation_guess = 1.0
+
+            B_guess = (wavelengths_fit.max() - wavelengths_fit.min()) / 5
 
             p0 = [
-                ydata.max()/2,              # A1
-                peak_wavelength - 0.5,      # x01
-                B_guess,                    # B1
-                ydata.max()/2,              # A2
-                peak_wavelength + 0.5,      # x02
-                B_guess,                    # B2
-                ydata.min()                 # C
+                Amax/2,                          # A1
+                peak_wavelength - 0.5,            # x01
+                B_guess,                          # B1
+                Amax/2,                          # A2
+                peak_wavelength + 0.5,            # x02
+                B_guess,                          # B2
+                y_fitdata.min()                  # C
             ]
 
+            # ---- Bounds ----
+            bounds = (
+                [
+                    0,
+                    peak_wavelength - 2,
+                    min_width,
+                    0,
+                    peak_wavelength - 2,
+                    min_width,
+                    -np.inf
+                ],
+                [
+                    np.inf,
+                    peak_wavelength + 2,
+                    max_width,
+                    np.inf,
+                    peak_wavelength + 2,
+                    max_width,
+                    np.inf
+                ]
+            )
+
+            # ---- Fit ----
             popt, cov = curve_fit(
                 double_lorentzian,
                 xdata=wavelengths_fit,
                 ydata=y_fitdata,
                 p0=p0,
+                bounds=bounds,
                 maxfev=20000
             )
 
@@ -274,20 +318,28 @@ def double_lorentzian_intensity_extractor(filename, sheet_name, column_name, sta
             x01_list.append(x01)
             x02_list.append(x02)
 
-            # ---------- INDIVIDUAL FIT PLOT ----------
-            plt.figure(1)
-            plt.scatter(wavelengths_fit, y_fitdata, color="black", s=3)
+            # ---------- Plot ----------
+            x_dense = np.linspace(wavelengths_fit.min(),
+                                  wavelengths_fit.max(), 2000)
+
+            plt.figure()
+            plt.scatter(wavelengths, ydata, s=4, color='grey', label='All data')
+            plt.scatter(wavelengths_fit, y_fitdata, s=10,
+                        color='black', label='Fit region')
             plt.plot(
-                wavelengths_fit,
-                double_lorentzian(wavelengths_fit, *popt),
-                color="grey"
+                x_dense,
+                double_lorentzian(x_dense, *popt),
+                color='red',
+                linestyle='--',
+                label='Double Lorentzian fit'
             )
+            plt.axvline(x01, color='blue', linestyle=':', label='x01')
+            plt.axvline(x02, color='green', linestyle=':', label='x02')
 
             plt.xlabel("Wavelength (nm)")
             plt.ylabel("Intensity")
-            plt.minorticks_on()
-            plt.tick_params(axis='both', which='major', size=6, direction='in')
-            plt.tick_params(axis='both', which='minor', size=3, direction='in')
+            plt.legend()
+            plt.tight_layout()
             plt.show()
 
             print(" ----- Results -----")
@@ -302,8 +354,8 @@ def double_lorentzian_intensity_extractor(filename, sheet_name, column_name, sta
         mean_x02 = np.mean(x02_list)
         err_x02 = np.std(x02_list)/np.sqrt(len(x02_list))
 
-        print(f"\nMean x01: {mean_x01:.4f} +- {err_x01:.4f}")
-        print(f"Mean x02: {mean_x02:.4f} +- {err_x02:.4f}")
+        print(f"\nMean x01: {mean_x01:.4f} ± {err_x01:.4f}")
+        print(f"Mean x02: {mean_x02:.4f} ± {err_x02:.4f}")
 
         results[sheet] = {
             "mean_x01": mean_x01,
@@ -317,7 +369,8 @@ def double_lorentzian_intensity_extractor(filename, sheet_name, column_name, sta
     return results
 
 
-#changes
+
+
 
 
 
