@@ -375,7 +375,12 @@ def double_lorentzian_intensity_extractor(
 
 
 
-def analyse_ruby_spectrum(file, sheet_name, columns, start_index):
+def analyse_ruby_spectrum(file,
+                          sheet_name,
+                          columns,
+                          start_index,
+                          mask_fraction=0):
+
 
     # ===============================
     # 1. Load data
@@ -430,6 +435,38 @@ def analyse_ruby_spectrum(file, sheet_name, columns, start_index):
     intensity_errors = np.std(y_matrix, axis=1, ddof=1) / np.sqrt(len(columns))
 
     # ===============================
+    #  Masking (optional)
+    # ===============================
+    if mask_fraction > 0:
+
+        threshold = mask_fraction * np.max(intensity_data)
+        mask = intensity_data > threshold
+
+        # Find contiguous True regions
+        indices = np.where(mask)[0]
+
+        if len(indices) == 0:
+            raise ValueError("Mask removed all data points.")
+
+        # Split into contiguous groups
+        splits = np.split(indices, np.where(np.diff(indices) != 1)[0] + 1)
+
+        # Choose largest continuous block
+        largest_block = max(splits, key=len)
+
+        continuous_mask = np.zeros_like(mask, dtype=bool)
+        continuous_mask[largest_block] = True
+
+        wavelengths_fit = wavelengths[continuous_mask]
+        intensity_fit = intensity_data[continuous_mask]
+        errors_fit = intensity_errors[continuous_mask]
+
+    else:
+        wavelengths_fit = wavelengths
+        intensity_fit = intensity_data
+        errors_fit = intensity_errors
+
+    # ===============================
     # 5. Double Voigt Model
     # ===============================
     def voigt_model_double(x, A1, center1, sigma, gamma,
@@ -468,9 +505,9 @@ def analyse_ruby_spectrum(file, sheet_name, columns, start_index):
 
     popt, cov = curve_fit(
         voigt_model_double,
-        wavelengths,
-        intensity_data,
-        sigma=intensity_errors,
+        wavelengths_fit,
+        intensity_fit,
+        sigma=errors_fit,
         absolute_sigma=True,
         p0=p0,
         bounds=bounds
@@ -481,11 +518,11 @@ def analyse_ruby_spectrum(file, sheet_name, columns, start_index):
     # ===============================
     dof = len(intensity_data) - len(popt)
     chi2 = chi2_function(voigt_model_double, popt,
-                            wavelengths, intensity_data, intensity_errors)
+                         wavelengths_fit, intensity_fit, errors_fit)
 
     reduced_chi2 = rchi2_function(voigt_model_double, popt,
-                                     wavelengths, intensity_data,
-                                     intensity_errors, dof)
+                                     wavelengths_fit, intensity_fit,
+                                     errors_fit, dof)
 
     # ===============================
     # 7. Plot Final Fit
@@ -496,6 +533,9 @@ def analyse_ruby_spectrum(file, sheet_name, columns, start_index):
                  yerr=intensity_errors,
                  color="black", linestyle='none', capsize=2)
 
+    if mask_fraction > 0:
+        plt.scatter(wavelengths_fit, intensity_fit,
+                    color="red", s=8, label="Fit Region")
     plt.plot(wavelengths,
              voigt_model_double(wavelengths, *popt),
              "--", color="grey", label='Double Voigt Fit')
