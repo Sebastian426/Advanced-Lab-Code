@@ -14,17 +14,17 @@ plt.rcParams["font.family"] = "Times New Roman"
 ###########################
 
 def wavelength_extraction(x, start_index):
-    A = 1.0095
+    A = 0.9958
     alpha_A = 0.0001
 
-    B = 9091.0570
+    B = 9096.6280
     alpha_B = 0.0289
 
     wavelengths = []
     uncertainties = []
 
     for i in range(len(x)):
-        wavelength = (start_index - x[i] / 10 - B) / A
+        wavelength = (start_index - 0.242*x[i] - B) / A
         uncertainty = np.abs((x[i] - (B + alpha_B)) / (A + alpha_A) - wavelength)
 
         wavelengths.append(wavelength)
