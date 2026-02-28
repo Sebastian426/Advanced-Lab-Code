@@ -495,7 +495,7 @@ def analyse_ruby_spectrum(file,
 
     bounds = (
         [0, 692, 0, 0,
-         0, 0,0,
+         0, 0.5,0,
          -np.inf],
 
         [np.inf, 695, np.inf, np.inf,

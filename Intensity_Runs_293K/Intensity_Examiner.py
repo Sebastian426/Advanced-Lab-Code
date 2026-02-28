@@ -14,17 +14,17 @@ plt.rcParams["font.family"] = "Times New Roman"
 ###########################
 
 def wavelength_extraction(x, start_index):
-    A = 0.9958
+    A = 1.0095
     alpha_A = 0.0001
 
-    B = 9096.6280
+    B = 9091.0570
     alpha_B = 0.0289
 
     wavelengths = []
     uncertainties = []
 
     for i in range(len(x)):
-        wavelength = (start_index - 0.242*x[i] - B) / A
+        wavelength = (start_index - x[i] / 10 - B) / A
         uncertainty = np.abs((x[i] - (B + alpha_B)) / (A + alpha_A) - wavelength)
 
         wavelengths.append(wavelength)
@@ -469,17 +469,16 @@ def analyse_ruby_spectrum(file,
     # ===============================
     # 5. Double Voigt Model
     # ===============================
-    def voigt_model_double(x, A1, center1, sigma, gamma,
-                                 A2, center2, offset):
+    def voigt_model_double(x, A1, center1, sigma1, gamma,
+                                 A2, delta, sigma2, offset):
         return (
-            A1 * voigt_profile(x - center1, sigma, gamma) +
-            A2 * voigt_profile(x - center2, sigma, gamma) +
+            A1 * voigt_profile(x - center1, sigma1, gamma) +
+            A2 * voigt_profile(x - (center1+delta), sigma2, gamma) +
             offset
         )
 
     # Initial guesses
-    center2_guess = wavelengths[np.argmax(intensity_data)]
-    center1_guess = center2_guess - 1.4  # known ruby separation
+    center1_guess = wavelengths[np.argmax(intensity_data)]
 
     amp_guess = (np.max(intensity_data) - np.min(intensity_data)) / 2
 
@@ -489,17 +488,18 @@ def analyse_ruby_spectrum(file,
         0.3,
         0.3,
         amp_guess,
-        center2_guess,
+        1.4,
+        0.3,
         np.min(intensity_data)
     ]
 
     bounds = (
-        [0, min(wavelengths), 0, 0,
-         0, min(wavelengths),
+        [0, 692, 0, 0,
+         0, 0.5,0,
          -np.inf],
 
-        [np.inf, max(wavelengths), np.inf, np.inf,
-         np.inf, max(wavelengths),
+        [np.inf, 695, np.inf, np.inf,
+         np.inf, 2, np.inf,
          np.inf]
     )
 
@@ -557,14 +557,27 @@ def analyse_ruby_spectrum(file,
     # ===============================
     perr = np.sqrt(np.diag(cov))
 
-    print("\n----- Fit Parameters -----")
-    print(f"R1: {popt[5]:.3f} ± {perr[5]:.3f} nm")
-    print(f"Theoretical R1: 694.3 nm")
-    print(f"Amplitude frac R1: {popt[4]/(popt[0]+popt[4]):.4f}")
+    center1 = popt[1]
+    delta = popt[5]
 
-    print(f"R2: {popt[1]:.3f} ± {perr[1]:.3f} nm")
-    print(f"Theoretical R2: 692.9 nm")
-    print(f"Amplitude frac R2: {popt[0]/(popt[0]+popt[4]):.4f}")
+    center1_err = perr[1]
+    delta_err = perr[5]
+
+    R2 = center1
+    R1 = center1 + delta
+
+    R2_err = center1_err
+    R1_err = np.sqrt(center1_err ** 2 + delta_err ** 2)
+
+    print("\n----- Fit Parameters -----")
+
+    print(f"R1: {R1:.3f} ± {R1_err:.3f} nm")
+    print("Theoretical R1: 694.3 nm")
+    print(f"Amplitude frac R1: {popt[4] / (popt[0] + popt[4]):.4f}")
+
+    print(f"\nR2: {R2:.3f} ± {R2_err:.3f} nm")
+    print("Theoretical R2: 692.9 nm")
+    print(f"Amplitude frac R2: {popt[0] / (popt[0] + popt[4]):.4f}")
 
     print(f"\nReduced Chi²: {reduced_chi2:.3f}")
 
